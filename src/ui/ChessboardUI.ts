@@ -1,5 +1,12 @@
 import { Chessboard } from '../core/Chessboard';
-import { ChessboardUIConfig } from './types';
+import { 
+  ChessboardUIConfig, 
+  UIElements, 
+  SelectionState, 
+  DragState, 
+  ArrowState, 
+  BoardSettings 
+} from './types';
 import { Square, Piece, Move } from '../core/types';
 import { createPieceElement } from './pieces';
 import {
@@ -20,7 +27,6 @@ import {
   getRankCoordinateStyles,
   getHighlightOverlayStyles,
   generateDynamicCSS,
-  getGameEndDialogStyles
 } from './styles';
 import {
   preventNativeDrag,
@@ -29,41 +35,55 @@ import {
   getSquareFromPoint,
   cleanupDragElements
 } from './dragAndDrop';
-import { createPromotionModal, createGameEndDialog } from './promotionDialog';
+import { createPromotionModal, } from './promotionDialog';
 import { EventEmitter, ChessboardEventType, ChessboardEventListener } from './events';
 
 export class ChessboardUI {
-  private boardElement!: HTMLElement;
-  private boardContainer!: HTMLElement;
-  private selectedSquare: Square | null = null;
-  private highlightedSquares: Set<string> = new Set();
-  private draggedPiece: { piece: Piece; from: Square } | null = null;
-  private dragElement: HTMLElement | null = null;
-  private lastMove: Move | null = null;
-  private flipped: boolean = false;
-  private showCoordinates: boolean = true;
-  private promotionModal: HTMLElement | null = null;
-  private isDragging: boolean = false;
-  private floatingPiece: HTMLElement | null = null;
-  private dragLegalTargets: Square[] = [];
-  private rightClickHighlights: Set<string> = new Set();
-  private arrows: Array<{ from: Square; to: Square }> = [];
-  private arrowSvg: SVGElement | null = null;
-  private isDrawingArrow: boolean = false;
-  private arrowStart: Square | null = null;
+  private ui: UIElements = {
+    boardElement: null,
+    boardContainer: null,
+    promotionModal: null,
+    arrowSvg: null,
+    floatingPiece: null,
+    dragElement: null
+  };
+  
+  private selection: SelectionState = {
+    selectedSquare: null,
+    highlightedSquares: new Set(),
+    rightClickHighlights: new Set(),
+    lastMove: null
+  };
+  
+  private drag: DragState = {
+    isDragging: false,
+    draggedPiece: null,
+    dragLegalTargets: [],
+    dragStartX: 0,
+    dragStartY: 0,
+    dragThreshold: 5,
+    potentialDragPiece: null
+  };
+  
+  private arrow: ArrowState = {
+    arrows: [],
+    isDrawingArrow: false,
+    arrowStart: null
+  };
+  
+  private settings: BoardSettings = {
+    flipped: false,
+    showCoordinates: true
+  };
+  
   private eventEmitter: EventEmitter = new EventEmitter();
-  private dragStartTime: number = 0;
-  private dragStartX: number = 0;
-  private dragStartY: number = 0;
-  private potentialDragPiece: { piece: Piece; square: Square; element: HTMLElement; event: PointerEvent } | null = null;
-  private dragThreshold: number = 5;
 
   constructor(
     private element: HTMLElement,
     private chessboard: Chessboard,
     private config: ChessboardUIConfig = DefaultChessboardUIConfig
   ) {
-    this.showCoordinates = config.showCoordinates ?? true;
+    this.settings.showCoordinates = config.showCoordinates ?? true;
     this.setupBoard();
     this.render();
     this.addStyles();
@@ -73,27 +93,27 @@ export class ChessboardUI {
   private setupBoard(): void {
     this.element.innerHTML = '';
 
-    this.boardContainer = document.createElement('div');
-    this.boardContainer.className = 'chessboard-container';
-    this.boardContainer.style.cssText = getBoardContainerStyles(this.config.size || 480);
+    this.ui.boardContainer = document.createElement('div');
+    this.ui.boardContainer.className = 'chessboard-container';
+    this.ui.boardContainer.style.cssText = getBoardContainerStyles(this.config.size || 480);
 
-    this.boardElement = document.createElement('div');
-    this.boardElement.className = 'chessboard';
-    this.boardElement.style.cssText = getBoardStyles();
+    this.ui.boardElement = document.createElement('div');
+    this.ui.boardElement.className = 'chessboard';
+    this.ui.boardElement.style.cssText = getBoardStyles();
 
-    this.boardContainer.appendChild(this.boardElement);
-    this.element.appendChild(this.boardContainer);
+    this.ui.boardContainer.appendChild(this.ui.boardElement);
+    this.element.appendChild(this.ui.boardContainer);
 
-    if (this.showCoordinates) {
+    if (this.settings.showCoordinates) {
       this.addCoordinates();
     }
   }
 
   private setupArrowLayer(): void {
-    if (!this.config.enableArrows) return;
+    if (!this.config.enableArrows || !this.ui.boardElement) return;
 
-    this.arrowSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    this.arrowSvg.style.cssText = `
+    this.ui.arrowSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    this.ui.arrowSvg.style.cssText = `
       position: absolute;
       top: 0;
       left: 0;
@@ -102,29 +122,33 @@ export class ChessboardUI {
       pointer-events: none;
       z-index: 10;
     `;
-    this.arrowSvg.setAttribute('viewBox', '0 0 100 100');
-    this.arrowSvg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
-    this.boardElement.appendChild(this.arrowSvg);
+    this.ui.arrowSvg.setAttribute('viewBox', '0 0 100 100');
+    this.ui.arrowSvg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+    this.ui.boardElement.appendChild(this.ui.arrowSvg);
   }
 
   private addCoordinates(): void {
+    if (!this.ui.boardContainer) return;
+    
     for (let i = 0; i < BOARD_SIZE; i++) {
       const fileLabel = document.createElement('div');
       fileLabel.className = 'coordinate file-coordinate';
       fileLabel.textContent = FILES[i];
-      fileLabel.style.cssText = getFileCoordinateStyles(i, this.flipped);
-      this.boardContainer.appendChild(fileLabel);
+      fileLabel.style.cssText = getFileCoordinateStyles(i, this.settings.flipped);
+      this.ui.boardContainer.appendChild(fileLabel);
 
       const rankLabel = document.createElement('div');
       rankLabel.className = 'coordinate rank-coordinate';
       rankLabel.textContent = RANKS[7 - i];
-      rankLabel.style.cssText = getRankCoordinateStyles(i, this.flipped);
-      this.boardContainer.appendChild(rankLabel);
+      rankLabel.style.cssText = getRankCoordinateStyles(i, this.settings.flipped);
+      this.ui.boardContainer.appendChild(rankLabel);
     }
   }
 
   private render(): void {
-    this.boardElement.innerHTML = '';
+    if (!this.ui.boardElement) return;
+    
+    this.ui.boardElement.innerHTML = '';
 
     this.renderSquares();
     this.renderPieces();
@@ -136,13 +160,15 @@ export class ChessboardUI {
   }
 
   private renderSquares(): void {
+    if (!this.ui.boardElement) return;
+    
     for (let row = 7; row >= 0; row--) {
       for (let col = 0; col < BOARD_SIZE; col++) {
-        const displayRow = this.flipped ? 7 - row : row;
-        const displayCol = this.flipped ? 7 - col : col;
+        const displayRow = this.settings.flipped ? 7 - row : row;
+        const displayCol = this.settings.flipped ? 7 - col : col;
 
         const squareElement = this.createSquareElement(displayRow, displayCol);
-        this.boardElement.appendChild(squareElement);
+        this.ui.boardElement.appendChild(squareElement);
       }
     }
   }
@@ -172,14 +198,15 @@ export class ChessboardUI {
       }
     }
 
-    if (this.lastMove) {
-      this.highlightSquare(this.lastMove.from, 'lastMove');
-      this.highlightSquare(this.lastMove.to, 'lastMove');
+    if (this.selection.lastMove) {
+      this.highlightSquare(this.selection.lastMove.from, 'lastMove');
+      this.highlightSquare(this.selection.lastMove.to, 'lastMove');
     }
   }
 
   private getSquareElement(row: number, col: number): HTMLElement | null {
-    return this.boardElement.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+    if (!this.ui.boardElement) return null;
+    return this.ui.boardElement.querySelector(`[data-row="${row}"][data-col="${col}"]`);
   }
 
   private createSquareElement(row: number, col: number): HTMLElement {
@@ -196,7 +223,7 @@ export class ChessboardUI {
     );
 
     const highlightKey = `${row}-${col}`;
-    if (this.highlightedSquares.has(highlightKey)) {
+    if (this.selection.highlightedSquares.has(highlightKey)) {
       squareElement.classList.add('highlighted');
     }
 
@@ -220,18 +247,20 @@ export class ChessboardUI {
 
 
   private addEventListeners(): void {
+    if (!this.ui.boardElement) return;
+    
     if (this.config.enableDragAndDrop) {
-      this.boardElement.addEventListener('pointerdown', this.handlePointerDown.bind(this));
+      this.ui.boardElement.addEventListener('pointerdown', this.handlePointerDown.bind(this));
     } else {
-      this.boardElement.addEventListener('click', this.handleSquareClick.bind(this));
+      this.ui.boardElement.addEventListener('click', this.handleSquareClick.bind(this));
     }
 
-    this.boardElement.addEventListener('contextmenu', (event) => event.preventDefault());
+    this.ui.boardElement.addEventListener('contextmenu', (event) => event.preventDefault());
 
     if (this.config.enableRightClickHighlight || this.config.enableArrows) {
-      this.boardElement.addEventListener('pointerdown', this.handleRightClick.bind(this));
-      this.boardElement.addEventListener('pointermove', this.handleRightDrag.bind(this));
-      this.boardElement.addEventListener('pointerup', this.handleRightRelease.bind(this));
+      this.ui.boardElement.addEventListener('pointerdown', this.handleRightClick.bind(this));
+      this.ui.boardElement.addEventListener('pointermove', this.handleRightDrag.bind(this));
+      this.ui.boardElement.addEventListener('pointerup', this.handleRightRelease.bind(this));
     }
   }
 
@@ -241,13 +270,13 @@ export class ChessboardUI {
 
     const clickedPiece = this.chessboard.getPiece(square);
 
-    if (this.selectedSquare) {
-      if (this.selectedSquare.row === square.row && this.selectedSquare.col === square.col) {
+    if (this.selection.selectedSquare) {
+      if (this.selection.selectedSquare.row === square.row && this.selection.selectedSquare.col === square.col) {
         this.clearSelection();
       } else {
-        const selectedPiece = this.chessboard.getPiece(this.selectedSquare);
+        const selectedPiece = this.chessboard.getPiece(this.selection.selectedSquare);
         if (selectedPiece && selectedPiece.color === this.chessboard.getTurn()) {
-          this.tryMove(this.selectedSquare, square);
+          this.tryMove(this.selection.selectedSquare, square);
         } else if (clickedPiece) {
           this.selectSquare(square);
         } else {
@@ -278,29 +307,28 @@ export class ChessboardUI {
     if (!square) return;
 
     const piece = this.chessboard.getPiece(square);
-    
+
     if (!piece) {
       this.handleSquareClick(event as MouseEvent);
       return;
     }
 
     const pieceEl = (event.target as HTMLElement).closest('.piece') as HTMLElement;
-    if (!pieceEl || this.isDragging) return;
+    if (!pieceEl || this.drag.isDragging) return;
 
-    this.dragStartTime = Date.now();
-    this.dragStartX = event.clientX;
-    this.dragStartY = event.clientY;
-    this.potentialDragPiece = { piece, square, element: pieceEl, event };
-    
+    this.drag.dragStartX = event.clientX;
+    this.drag.dragStartY = event.clientY;
+    this.drag.potentialDragPiece = { piece, square, element: pieceEl, event };
+
     (event.target as Element).setPointerCapture?.(event.pointerId);
     window.addEventListener('pointermove', this.handleDragStart);
     window.addEventListener('pointerup', this.handlePointerUpWithClick, { once: true });
   }
 
   private initiateDrag(pieceEl: HTMLElement, piece: Piece, from: Square, event: PointerEvent): void {
-    this.draggedPiece = { piece, from };
-    this.dragElement = pieceEl;
-    this.isDragging = true;
+    this.drag.draggedPiece = { piece, from };
+    this.ui.dragElement = pieceEl;
+    this.drag.isDragging = true;
 
     preventNativeDrag(pieceEl);
     event.preventDefault();
@@ -319,31 +347,33 @@ export class ChessboardUI {
 
   private showLegalMoves(from: Square): void {
     this.clearHighlights(true);
-    this.selectedSquare = from;
-    
-    if (this.lastMove) {
-      this.highlightSquare(this.lastMove.from, 'lastMove');
-      this.highlightSquare(this.lastMove.to, 'lastMove');
+    this.selection.selectedSquare = from;
+
+    if (this.selection.lastMove) {
+      this.highlightSquare(this.selection.lastMove.from, 'lastMove');
+      this.highlightSquare(this.selection.lastMove.to, 'lastMove');
     }
-    
+
     this.highlightSquare(from, 'selected');
 
     const piece = this.chessboard.getPiece(from);
     if (piece && piece.color === this.chessboard.getTurn()) {
-      this.dragLegalTargets = this.chessboard.getLegalMoves(from).map(m => m.to);
-      for (const to of this.dragLegalTargets) {
+      this.drag.dragLegalTargets = this.chessboard.getLegalMoves(from).map(m => m.to);
+      for (const to of this.drag.dragLegalTargets) {
         const targetPiece = this.chessboard.getPiece(to);
         this.highlightSquare(to, targetPiece ? 'capture' : 'legalMove');
       }
     } else {
-      this.dragLegalTargets = [];
+      this.drag.dragLegalTargets = [];
     }
   }
 
   private setupFloatingPiece(pieceEl: HTMLElement, event: PointerEvent): void {
-    this.floatingPiece = createFloatingPiece(
+    if (!this.ui.boardContainer) return;
+    
+    this.ui.floatingPiece = createFloatingPiece(
       pieceEl,
-      this.boardContainer,
+      this.ui.boardContainer,
       event.clientX,
       event.clientY
     );
@@ -352,33 +382,33 @@ export class ChessboardUI {
   private handlePointerMoveBound = (e: PointerEvent) => this.handlePointerMove(e);
   private handlePointerUpBound = (e: PointerEvent) => this.handlePointerUp(e);
   private handleDragStart = (e: PointerEvent) => {
-    if (!this.potentialDragPiece) return;
-    
-    const deltaX = Math.abs(e.clientX - this.dragStartX);
-    const deltaY = Math.abs(e.clientY - this.dragStartY); 
+    if (!this.drag.potentialDragPiece) return;
+
+    const deltaX = Math.abs(e.clientX - this.drag.dragStartX);
+    const deltaY = Math.abs(e.clientY - this.drag.dragStartY);
     const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-    
-    if (distance > this.dragThreshold) {
+
+    if (distance > this.drag.dragThreshold) {
       window.removeEventListener('pointermove', this.handleDragStart);
       window.removeEventListener('pointerup', this.handlePointerUpWithClick);
-      
-      const { piece, square, element, event } = this.potentialDragPiece;
+
+      const { piece, square, element, event } = this.drag.potentialDragPiece;
       this.initiateDrag(element, piece, square, event);
-      this.potentialDragPiece = null;
+      this.drag.potentialDragPiece = null;
     }
   };
-  
+
   private handlePointerUpWithClick = (e: PointerEvent) => {
     window.removeEventListener('pointermove', this.handleDragStart);
-    
-    if (this.potentialDragPiece) {
+
+    if (this.drag.potentialDragPiece) {
       this.handleSquareClick(e as MouseEvent);
-      this.potentialDragPiece = null;
+      this.drag.potentialDragPiece = null;
     }
   };
-  
+
   private handleAbortDragOnRightClick = (e: MouseEvent | PointerEvent) => {
-    if (this.isDragging && (e.type === 'contextmenu' || (e as PointerEvent).button === 2)) {
+    if (this.drag.isDragging && (e.type === 'contextmenu' || (e as PointerEvent).button === 2)) {
       e.preventDefault();
       e.stopPropagation();
       this.abortDrag();
@@ -386,11 +416,11 @@ export class ChessboardUI {
   };
 
   private handlePointerMove(event: PointerEvent): void {
-    if (!this.isDragging || !this.floatingPiece) return;
-    const rect = this.boardContainer.getBoundingClientRect();
-    const boardRect = this.boardElement.getBoundingClientRect();
+    if (!this.drag.isDragging || !this.ui.floatingPiece || !this.ui.boardContainer || !this.ui.boardElement) return;
+    const rect = this.ui.boardContainer.getBoundingClientRect();
+    const boardRect = this.ui.boardElement.getBoundingClientRect();
     updateFloatingPiecePosition(
-      this.floatingPiece,
+      this.ui.floatingPiece,
       event.clientX - rect.left,
       event.clientY - rect.top,
       boardRect.width,
@@ -399,27 +429,27 @@ export class ChessboardUI {
   }
 
   private handlePointerUp(event: PointerEvent): void {
-    if (!this.isDragging) return;
+    if (!this.drag.isDragging || !this.ui.boardElement) return;
 
-    const rect = this.boardElement.getBoundingClientRect();
+    const rect = this.ui.boardElement.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
-    const square = getSquareFromPoint(x, y, this.boardElement.clientWidth, this.flipped);
+    const square = getSquareFromPoint(x, y, this.ui.boardElement.clientWidth, this.settings.flipped);
 
-    if (this.draggedPiece && square) {
-      const dragEl = this.dragElement;
-      const fromSquare = this.draggedPiece.from;
-      const piece = this.draggedPiece.piece;
-      
+    if (this.drag.draggedPiece && square) {
+      const dragEl = this.ui.dragElement;
+      const fromSquare = this.drag.draggedPiece.from;
+      const piece = this.drag.draggedPiece.piece;
+
       if (piece.color === this.chessboard.getTurn()) {
         this.tryMove(fromSquare, square);
-        if (this.lastMove &&
-          this.lastMove.from.row === fromSquare.row &&
-          this.lastMove.from.col === fromSquare.col) {
+        if (this.selection.lastMove &&
+          this.selection.lastMove.from.row === fromSquare.row &&
+          this.selection.lastMove.from.col === fromSquare.col) {
           dragEl?.remove();
         }
       } else {
-        this.selectedSquare = fromSquare;
+        this.selection.selectedSquare = fromSquare;
       }
     }
 
@@ -437,13 +467,13 @@ export class ChessboardUI {
 
   private showLegalMovesForSquare(square: Square): void {
     this.clearHighlights(true);
-    this.selectedSquare = square;
-    
-    if (this.lastMove) {
-      this.highlightSquare(this.lastMove.from, 'lastMove');
-      this.highlightSquare(this.lastMove.to, 'lastMove');
+    this.selection.selectedSquare = square;
+
+    if (this.selection.lastMove) {
+      this.highlightSquare(this.selection.lastMove.from, 'lastMove');
+      this.highlightSquare(this.selection.lastMove.to, 'lastMove');
     }
-    
+
     this.highlightSquare(square, 'selected');
 
     const piece = this.chessboard.getPiece(square);
@@ -486,9 +516,11 @@ export class ChessboardUI {
   }
 
   private showPromotionDialog(from: Square, to: Square, color: 'white' | 'black'): void {
+    if (!this.ui.boardContainer) return;
+    
     this.closePromotionDialog();
 
-    this.promotionModal = createPromotionModal(
+    this.ui.promotionModal = createPromotionModal(
       from,
       to,
       color,
@@ -500,19 +532,19 @@ export class ChessboardUI {
         this.closePromotionDialog();
       }
     );
-    this.boardContainer.appendChild(this.promotionModal);
+    this.ui.boardContainer.appendChild(this.ui.promotionModal);
   }
 
   private closePromotionDialog(): void {
-    if (this.promotionModal) {
-      this.promotionModal.remove();
-      this.promotionModal = null;
+    if (this.ui.promotionModal) {
+      this.ui.promotionModal.remove();
+      this.ui.promotionModal = null;
     }
   }
 
   private highlightSquare(square: Square, type: 'selected' | 'lastMove' | 'check' | 'legalMove' | 'capture'): void {
     const key = `${square.row}-${square.col}`;
-    this.highlightedSquares.add(key);
+    this.selection.highlightedSquares.add(key);
 
     const squareElement = this.getSquareElement(square.row, square.col);
     if (!squareElement) return;
@@ -540,67 +572,69 @@ export class ChessboardUI {
   }
 
   private clearHighlights(preserveLastMove: boolean = false): void {
+    if (!this.ui.boardElement) return;
+    
     if (preserveLastMove) {
-      this.boardElement.querySelectorAll('.highlight:not(.highlight-lastMove)').forEach(el => el.remove());
+      this.ui.boardElement.querySelectorAll('.highlight:not(.highlight-lastMove)').forEach(el => el.remove());
       const newHighlights = new Set<string>();
-      if (this.lastMove) {
-        newHighlights.add(`${this.lastMove.from.row}-${this.lastMove.from.col}`);
-        newHighlights.add(`${this.lastMove.to.row}-${this.lastMove.to.col}`);
+      if (this.selection.lastMove) {
+        newHighlights.add(`${this.selection.lastMove.from.row}-${this.selection.lastMove.from.col}`);
+        newHighlights.add(`${this.selection.lastMove.to.row}-${this.selection.lastMove.to.col}`);
       }
-      this.highlightedSquares = newHighlights;
+      this.selection.highlightedSquares = newHighlights;
     } else {
-      this.highlightedSquares.clear();
-      this.boardElement.querySelectorAll('.highlight').forEach(el => el.remove());
+      this.selection.highlightedSquares.clear();
+      this.ui.boardElement.querySelectorAll('.highlight').forEach(el => el.remove());
     }
   }
 
   private handleSuccessfulMove(move: Move): void {
-    this.lastMove = move;
+    this.selection.lastMove = move;
     this.clearSelection();
-    
+
     const gameState = this.chessboard.getGameState();
-    
+
     this.eventEmitter.emit({
       type: 'move',
       data: { move, gameState }
     });
-    
+
     if (move.isCapture) {
       this.eventEmitter.emit({
         type: 'capture',
         data: { move, capturedPiece: move.capturedPiece, gameState }
       });
     }
-    
+
     if (move.isCastling) {
       this.eventEmitter.emit({
         type: 'castle',
         data: { move, side: move.castlingSide!, gameState }
       });
     }
-    
+
     if (move.promotion) {
       this.eventEmitter.emit({
         type: 'promotion',
         data: { move, gameState }
       });
     }
-    
+
     this.render();
     this.checkGameStatus();
   }
 
   private cleanupDragState(): void {
-    this.isDragging = false;
-    cleanupDragElements(this.floatingPiece, this.dragElement);
-    this.floatingPiece = null;
-    this.dragElement = null;
-    this.draggedPiece = null;
-    this.dragLegalTargets = [];
+    this.drag.isDragging = false;
+    cleanupDragElements(this.ui.floatingPiece, this.ui.dragElement);
+    this.ui.floatingPiece = null;
+    this.ui.dragElement = null;
+    this.drag.draggedPiece = null;
+    this.drag.dragLegalTargets = [];
     window.removeEventListener('contextmenu', this.handleAbortDragOnRightClick);
     document.removeEventListener('pointerdown', this.handleAbortDragOnRightClick);
   }
-  
+
   private abortDrag(): void {
     window.removeEventListener('pointermove', this.handlePointerMoveBound);
     window.removeEventListener('pointerup', this.handlePointerUpBound);
@@ -609,12 +643,12 @@ export class ChessboardUI {
   }
 
   private clearSelection(): void {
-    this.selectedSquare = null;
+    this.selection.selectedSquare = null;
     this.clearHighlights(true);
 
-    if (this.lastMove) {
-      this.highlightSquare(this.lastMove.from, 'lastMove');
-      this.highlightSquare(this.lastMove.to, 'lastMove');
+    if (this.selection.lastMove) {
+      this.highlightSquare(this.selection.lastMove.from, 'lastMove');
+      this.highlightSquare(this.selection.lastMove.to, 'lastMove');
     }
   }
 
@@ -653,53 +687,55 @@ export class ChessboardUI {
     if (!square) return;
 
     if (this.config.enableArrows) {
-      this.isDrawingArrow = true;
-      this.arrowStart = square;
+      this.arrow.isDrawingArrow = true;
+      this.arrow.arrowStart = square;
     }
   }
 
   private handleRightDrag(): void {
-    if (!this.isDrawingArrow || !this.arrowStart) return;
+    if (!this.arrow.isDrawingArrow || !this.arrow.arrowStart) return;
   }
 
   private handleRightRelease(event: PointerEvent): void {
-    if (!this.arrowStart) return;
+    if (!this.arrow.arrowStart) return;
 
     const endSquare = this.getSquareFromElement(event.target as HTMLElement);
     if (!endSquare) {
-      this.isDrawingArrow = false;
-      this.arrowStart = null;
+      this.arrow.isDrawingArrow = false;
+      this.arrow.arrowStart = null;
       return;
     }
 
-    const isDrag = endSquare.row !== this.arrowStart.row || endSquare.col !== this.arrowStart.col;
+    const isDrag = endSquare.row !== this.arrow.arrowStart.row || endSquare.col !== this.arrow.arrowStart.col;
 
     if (isDrag && this.config.enableArrows) {
-      this.toggleArrow(this.arrowStart, endSquare);
+      this.toggleArrow(this.arrow.arrowStart, endSquare);
     } else if (!isDrag && this.config.enableRightClickHighlight) {
       this.toggleRightClickHighlight(endSquare);
     }
 
-    this.isDrawingArrow = false;
-    this.arrowStart = null;
+    this.arrow.isDrawingArrow = false;
+    this.arrow.arrowStart = null;
   }
 
   private toggleRightClickHighlight(square: Square): void {
     const key = `${square.row}-${square.col}`;
 
-    if (this.rightClickHighlights.has(key)) {
-      this.rightClickHighlights.delete(key);
+    if (this.selection.rightClickHighlights.has(key)) {
+      this.selection.rightClickHighlights.delete(key);
     } else {
-      this.rightClickHighlights.add(key);
+      this.selection.rightClickHighlights.add(key);
     }
 
     this.applyRightClickHighlights();
   }
 
   private applyRightClickHighlights(): void {
-    this.boardElement.querySelectorAll('.highlight-rightClick').forEach(el => el.remove());
+    if (!this.ui.boardElement) return;
+    
+    this.ui.boardElement.querySelectorAll('.highlight-rightClick').forEach(el => el.remove());
 
-    for (const key of this.rightClickHighlights) {
+    for (const key of this.selection.rightClickHighlights) {
       const [row, col] = key.split('-').map(Number);
       const squareElement = this.getSquareElement(row, col);
       if (squareElement) {
@@ -710,24 +746,24 @@ export class ChessboardUI {
   }
 
   private toggleArrow(from: Square, to: Square): void {
-    const arrowIndex = this.arrows.findIndex(
+    const arrowIndex = this.arrow.arrows.findIndex(
       arrow => arrow.from.row === from.row && arrow.from.col === from.col &&
         arrow.to.row === to.row && arrow.to.col === to.col
     );
 
     if (arrowIndex !== -1) {
-      this.arrows.splice(arrowIndex, 1);
+      this.arrow.arrows.splice(arrowIndex, 1);
     } else {
-      this.arrows.push({ from, to });
+      this.arrow.arrows.push({ from, to });
     }
 
     this.renderArrows();
   }
 
   private renderArrows(): void {
-    if (!this.arrowSvg) return;
+    if (!this.ui.arrowSvg) return;
 
-    this.arrowSvg.innerHTML = '';
+    this.ui.arrowSvg.innerHTML = '';
 
     const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
     const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
@@ -745,11 +781,11 @@ export class ChessboardUI {
 
     marker.appendChild(path);
     defs.appendChild(marker);
-    this.arrowSvg.appendChild(defs);
+    this.ui.arrowSvg.appendChild(defs);
 
-    for (const arrow of this.arrows) {
+    for (const arrow of this.arrow.arrows) {
       const element = this.createArrowElement(arrow.from, arrow.to);
-      this.arrowSvg.appendChild(element);
+      this.ui.arrowSvg.appendChild(element);
     }
   }
 
@@ -761,10 +797,10 @@ export class ChessboardUI {
 
   private isLegalKnightMove(from: Square, to: Square): boolean {
     if (!this.isKnightMove(from, to)) return false;
-    
+
     const piece = this.chessboard.getPiece(from);
     if (!piece || piece.type !== 'knight') return false;
-    
+
     const legalMoves = this.chessboard.getLegalMoves(from);
     return legalMoves.some(move => move.to.row === to.row && move.to.col === to.col);
   }
@@ -786,8 +822,7 @@ export class ChessboardUI {
     const toY = (7 - to.row + 0.5) * 12.5;
 
     const rowDiff = Math.abs(to.row - from.row);
-    const colDiff = Math.abs(to.col - from.col);
-    
+
     let midX, midY;
     if (rowDiff === 2) {
       midX = fromX;
@@ -804,12 +839,12 @@ export class ChessboardUI {
     const adjustedToX = midX + dx * scale;
     const adjustedToY = midY + dy * scale;
 
-    const x1 = this.flipped ? 100 - fromX : fromX;
-    const y1 = this.flipped ? 100 - fromY : fromY;
-    const mx = this.flipped ? 100 - midX : midX;
-    const my = this.flipped ? 100 - midY : midY;
-    const x2 = this.flipped ? 100 - adjustedToX : adjustedToX;
-    const y2 = this.flipped ? 100 - adjustedToY : adjustedToY;
+    const x1 = this.settings.flipped ? 100 - fromX : fromX;
+    const y1 = this.settings.flipped ? 100 - fromY : fromY;
+    const mx = this.settings.flipped ? 100 - midX : midX;
+    const my = this.settings.flipped ? 100 - midY : midY;
+    const x2 = this.settings.flipped ? 100 - adjustedToX : adjustedToX;
+    const y2 = this.settings.flipped ? 100 - adjustedToY : adjustedToY;
 
     const pathData = `M ${x1} ${y1} L ${mx} ${my} L ${x2} ${y2}`;
     path.setAttribute('d', pathData);
@@ -836,12 +871,12 @@ export class ChessboardUI {
     const length = Math.sqrt(dx * dx + dy * dy);
     const scale = (length - 2) / length;
 
-    const x1 = this.flipped ? 100 - fromX : fromX;
-    const y1 = this.flipped ? 100 - fromY : fromY;
+    const x1 = this.settings.flipped ? 100 - fromX : fromX;
+    const y1 = this.settings.flipped ? 100 - fromY : fromY;
     const adjustedToX = fromX + dx * scale;
     const adjustedToY = fromY + dy * scale;
-    const x2 = this.flipped ? 100 - adjustedToX : adjustedToX;
-    const y2 = this.flipped ? 100 - adjustedToY : adjustedToY;
+    const x2 = this.settings.flipped ? 100 - adjustedToX : adjustedToX;
+    const y2 = this.settings.flipped ? 100 - adjustedToY : adjustedToY;
 
     line.setAttribute('x1', x1.toString());
     line.setAttribute('y1', y1.toString());
@@ -856,12 +891,12 @@ export class ChessboardUI {
   }
 
   private clearArrows(): void {
-    this.arrows = [];
+    this.arrow.arrows = [];
     this.renderArrows();
   }
 
   private clearRightClickHighlights(): void {
-    this.rightClickHighlights.clear();
+    this.selection.rightClickHighlights.clear();
     this.applyRightClickHighlights();
   }
 
@@ -874,20 +909,20 @@ export class ChessboardUI {
   }
 
   public flipBoard(): void {
-    this.flipped = !this.flipped;
+    this.settings.flipped = !this.settings.flipped;
     this.render();
 
-    if (this.showCoordinates) {
-      this.boardContainer.querySelectorAll('.coordinate').forEach(el => el.remove());
+    if (this.settings.showCoordinates && this.ui.boardContainer) {
+      this.ui.boardContainer.querySelectorAll('.coordinate').forEach(el => el.remove());
       this.addCoordinates();
     }
   }
 
   public reset(): void {
     this.chessboard = new Chessboard();
-    this.selectedSquare = null;
-    this.highlightedSquares.clear();
-    this.lastMove = null;
+    this.selection.selectedSquare = null;
+    this.selection.highlightedSquares.clear();
+    this.selection.lastMove = null;
     this.clearArrows();
     this.clearRightClickHighlights();
     this.render();
