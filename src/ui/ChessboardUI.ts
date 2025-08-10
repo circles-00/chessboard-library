@@ -309,6 +309,7 @@ export class ChessboardUI {
     (event.target as Element).setPointerCapture?.(event.pointerId);
     window.addEventListener('pointermove', this.handlePointerMoveBound);
     window.addEventListener('pointerup', this.handlePointerUpBound, { once: true });
+    window.addEventListener('pointerdown', this.handleAbortDrag);
   }
 
   private showLegalMoves(from: Square): void {
@@ -357,6 +358,14 @@ export class ChessboardUI {
     if (this.potentialDragPiece) {
       this.handleSquareClick(e as MouseEvent);
       this.potentialDragPiece = null;
+    }
+  };
+  
+  private handleAbortDrag = (e: PointerEvent) => {
+    if (e.button === 2 && this.isDragging) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.abortDrag();
     }
   };
 
@@ -547,6 +556,14 @@ export class ChessboardUI {
     this.dragElement = null;
     this.draggedPiece = null;
     this.dragLegalTargets = [];
+    window.removeEventListener('pointerdown', this.handleAbortDrag);
+  }
+  
+  private abortDrag(): void {
+    window.removeEventListener('pointermove', this.handlePointerMoveBound);
+    window.removeEventListener('pointerup', this.handlePointerUpBound);
+    this.cleanupDragState();
+    this.clearSelection();
   }
 
   private clearSelection(): void {
