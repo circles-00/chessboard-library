@@ -233,7 +233,14 @@ export class ChessboardUI {
     if (!square) return;
 
     if (this.selectedSquare) {
-      this.tryMove(this.selectedSquare, square);
+      // Check if clicking the same square that's already selected
+      if (this.selectedSquare.row === square.row && this.selectedSquare.col === square.col) {
+        // Toggle off the selection
+        this.clearSelection();
+      } else {
+        // Try to move or select a new piece
+        this.tryMove(this.selectedSquare, square);
+      }
     } else {
       this.selectSquare(square);
     }
@@ -371,6 +378,15 @@ export class ChessboardUI {
       return;
     }
 
+    // Check if the target square has a piece of the same color
+    const targetPiece = this.chessboard.getPiece(to);
+    if (targetPiece && targetPiece.color === piece.color) {
+      // Select the new piece instead of trying to move
+      this.clearSelection();
+      this.selectSquare(to);
+      return;
+    }
+
     const isPromotion = piece.type === 'pawn' &&
       ((piece.color === 'white' && to.row === 7) || (piece.color === 'black' && to.row === 0));
 
@@ -381,8 +397,8 @@ export class ChessboardUI {
       if (this.chessboard.move(move)) {
         this.handleSuccessfulMove(move);
       } else {
+        // Invalid move, just clear the selection
         this.clearSelection();
-        this.selectSquare(to);
       }
     }
   }
