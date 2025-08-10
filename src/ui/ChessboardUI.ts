@@ -318,8 +318,14 @@ export class ChessboardUI {
   }
 
   private showLegalMoves(from: Square): void {
-    this.clearHighlights();
+    this.clearHighlights(true);
     this.selectedSquare = from;
+    
+    if (this.lastMove) {
+      this.highlightSquare(this.lastMove.from, 'lastMove');
+      this.highlightSquare(this.lastMove.to, 'lastMove');
+    }
+    
     this.highlightSquare(from, 'selected');
 
     const piece = this.chessboard.getPiece(from);
@@ -430,8 +436,14 @@ export class ChessboardUI {
   }
 
   private showLegalMovesForSquare(square: Square): void {
-    this.clearHighlights();
+    this.clearHighlights(true);
     this.selectedSquare = square;
+    
+    if (this.lastMove) {
+      this.highlightSquare(this.lastMove.from, 'lastMove');
+      this.highlightSquare(this.lastMove.to, 'lastMove');
+    }
+    
     this.highlightSquare(square, 'selected');
 
     const piece = this.chessboard.getPiece(square);
@@ -527,9 +539,19 @@ export class ChessboardUI {
     return overlay;
   }
 
-  private clearHighlights(): void {
-    this.highlightedSquares.clear();
-    this.boardElement.querySelectorAll('.highlight').forEach(el => el.remove());
+  private clearHighlights(preserveLastMove: boolean = false): void {
+    if (preserveLastMove) {
+      this.boardElement.querySelectorAll('.highlight:not(.highlight-lastMove)').forEach(el => el.remove());
+      const newHighlights = new Set<string>();
+      if (this.lastMove) {
+        newHighlights.add(`${this.lastMove.from.row}-${this.lastMove.from.col}`);
+        newHighlights.add(`${this.lastMove.to.row}-${this.lastMove.to.col}`);
+      }
+      this.highlightedSquares = newHighlights;
+    } else {
+      this.highlightedSquares.clear();
+      this.boardElement.querySelectorAll('.highlight').forEach(el => el.remove());
+    }
   }
 
   private handleSuccessfulMove(move: Move): void {
@@ -588,7 +610,7 @@ export class ChessboardUI {
 
   private clearSelection(): void {
     this.selectedSquare = null;
-    this.clearHighlights();
+    this.clearHighlights(true);
 
     if (this.lastMove) {
       this.highlightSquare(this.lastMove.from, 'lastMove');
