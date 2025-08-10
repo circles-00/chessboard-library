@@ -52,6 +52,11 @@ export class ChessboardUI {
   private isDrawingArrow: boolean = false;
   private arrowStart: Square | null = null;
   private eventEmitter: EventEmitter = new EventEmitter();
+  private dragStartTime: number = 0;
+  private dragStartX: number = 0;
+  private dragStartY: number = 0;
+  private potentialDragPiece: { piece: Piece; square: Square; element: HTMLElement; event: PointerEvent } | null = null;
+  private dragThreshold: number = 5;
 
   constructor(
     private element: HTMLElement,
@@ -215,10 +220,10 @@ export class ChessboardUI {
 
 
   private addEventListeners(): void {
-    this.boardElement.addEventListener('click', this.handleSquareClick.bind(this));
-
     if (this.config.enableDragAndDrop) {
       this.boardElement.addEventListener('pointerdown', this.handlePointerDown.bind(this));
+    } else {
+      this.boardElement.addEventListener('click', this.handleSquareClick.bind(this));
     }
 
     this.boardElement.addEventListener('contextmenu', (event) => event.preventDefault());
@@ -264,12 +269,28 @@ export class ChessboardUI {
     if (!square) return;
 
     const piece = this.chessboard.getPiece(square);
-    if (!piece || piece.color !== this.chessboard.getTurn()) return;
+    
+    if (!piece) {
+      this.handleSquareClick(event as MouseEvent);
+      return;
+    }
+
+    if (piece.color !== this.chessboard.getTurn()) {
+      this.handleSquareClick(event as MouseEvent);
+      return;
+    }
 
     const pieceEl = (event.target as HTMLElement).closest('.piece') as HTMLElement;
     if (!pieceEl || this.isDragging) return;
 
-    this.initiateDrag(pieceEl, piece, square, event);
+    this.dragStartTime = Date.now();
+    this.dragStartX = event.clientX;
+    this.dragStartY = event.clientY;
+    this.potentialDragPiece = { piece, square, element: pieceEl, event };
+    
+    (event.target as Element).setPointerCapture?.(event.pointerId);
+    window.addEventListener('pointermove', this.handleDragStart);
+    window.addEventListener('pointerup', this.handlePointerUpWithClick, { once: true });
   }
 
   private initiateDrag(pieceEl: HTMLElement, piece: Piece, from: Square, event: PointerEvent): void {
@@ -313,6 +334,31 @@ export class ChessboardUI {
 
   private handlePointerMoveBound = (e: PointerEvent) => this.handlePointerMove(e);
   private handlePointerUpBound = (e: PointerEvent) => this.handlePointerUp(e);
+  private handleDragStart = (e: PointerEvent) => {
+    if (!this.potentialDragPiece) return;
+    
+    const deltaX = Math.abs(e.clientX - this.dragStartX);
+    const deltaY = Math.abs(e.clientY - this.dragStartY); 
+    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+    
+    if (distance > this.dragThreshold) {
+      window.removeEventListener('pointermove', this.handleDragStart);
+      window.removeEventListener('pointerup', this.handlePointerUpWithClick);
+      
+      const { piece, square, element, event } = this.potentialDragPiece;
+      this.initiateDrag(element, piece, square, event);
+      this.potentialDragPiece = null;
+    }
+  };
+  
+  private handlePointerUpWithClick = (e: PointerEvent) => {
+    window.removeEventListener('pointermove', this.handleDragStart);
+    
+    if (this.potentialDragPiece) {
+      this.handleSquareClick(e as MouseEvent);
+      this.potentialDragPiece = null;
+    }
+  };
 
   private handlePointerMove(event: PointerEvent): void {
     if (!this.isDragging || !this.floatingPiece) return;
