@@ -24,19 +24,19 @@ export const getBoardStyles = () => `
 
 export const getSquareStyles = (isLight: boolean, lightColor: string, darkColor: string) => `
   position: relative;
-  display: flex;
-  justify-content: center;
-  align-items: center;
   background-color: ${isLight ? lightColor : darkColor};
   cursor: pointer;
   transition: all 0.15s ease;
 `;
 
 export const getPieceStyles = (animationDuration: number) => `
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   cursor: grab;
   transition: transform ${animationDuration}ms ease;
   z-index: ${Z_INDEX.PIECE};
-  position: relative;
 `;
 
 export const getFileCoordinateStyles = (index: number, flipped: boolean) => `
@@ -146,6 +146,9 @@ export const generateDynamicCSS = (config: ChessboardUIConfig) => `
 
   .square {
     transition: background-color 0.2s ease;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
   }
 
   .square.light {
