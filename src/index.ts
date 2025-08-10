@@ -7,3 +7,4 @@ export * from './ui/types';
 export * from './ui/ChessboardUI';
 export * from './ui/defaultConfig';
 export { DEFAULT_COLORS } from './ui/colors';
+export * from './ui/events';

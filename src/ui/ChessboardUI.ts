@@ -30,6 +30,7 @@ import {
   cleanupDragElements
 } from './dragAndDrop';
 import { createPromotionModal, createGameEndDialog } from './promotionDialog';
+import { EventEmitter, ChessboardEventType, ChessboardEventListener } from './events';
 
 export class ChessboardUI {
   private boardElement!: HTMLElement;
@@ -50,6 +51,7 @@ export class ChessboardUI {
   private arrowSvg: SVGElement | null = null;
   private isDrawingArrow: boolean = false;
   private arrowStart: Square | null = null;
+  private eventEmitter: EventEmitter = new EventEmitter();
 
   constructor(
     private element: HTMLElement,
@@ -465,6 +467,37 @@ export class ChessboardUI {
   private handleSuccessfulMove(move: Move): void {
     this.lastMove = move;
     this.clearSelection();
+    
+    const gameState = this.chessboard.getGameState();
+    
+    // Emit move event
+    this.eventEmitter.emit({
+      type: 'move',
+      data: { move, gameState }
+    });
+    
+    // Check for special move types
+    if (move.isCapture) {
+      this.eventEmitter.emit({
+        type: 'capture',
+        data: { move, capturedPiece: move.capturedPiece, gameState }
+      });
+    }
+    
+    if (move.isCastling) {
+      this.eventEmitter.emit({
+        type: 'castle',
+        data: { move, side: move.castlingSide!, gameState }
+      });
+    }
+    
+    if (move.promotion) {
+      this.eventEmitter.emit({
+        type: 'promotion',
+        data: { move, gameState }
+      });
+    }
+    
     this.render();
     this.checkGameStatus();
   }
@@ -492,19 +525,27 @@ export class ChessboardUI {
     const gameState = this.chessboard.getGameState();
 
     if (gameState.isCheckmate) {
-      const winner = gameState.turn === 'white' ? 'Black' : 'White';
-      this.showGameEndDialog(`Checkmate! ${winner} wins!`);
+      const winner = gameState.turn === 'white' ? 'black' : 'white';
+      this.eventEmitter.emit({
+        type: 'checkmate',
+        data: { winner, gameState }
+      });
     } else if (gameState.isStalemate) {
-      this.showGameEndDialog('Stalemate! The game is a draw.');
+      this.eventEmitter.emit({
+        type: 'stalemate',
+        data: { gameState }
+      });
     } else if (gameState.isDraw) {
-      this.showGameEndDialog('Draw!');
+      this.eventEmitter.emit({
+        type: 'draw',
+        data: { reason: 'Insufficient material or threefold repetition', gameState }
+      });
+    } else if (gameState.isCheck) {
+      this.eventEmitter.emit({
+        type: 'check',
+        data: { kingColor: gameState.turn, gameState }
+      });
     }
-  }
-
-  private showGameEndDialog(message: string): void {
-    const dialog = createGameEndDialog(message);
-    dialog.style.cssText = getGameEndDialogStyles();
-    this.boardContainer.appendChild(dialog);
   }
 
   private handleRightClick(event: PointerEvent): void {
@@ -734,6 +775,14 @@ export class ChessboardUI {
   private clearRightClickHighlights(): void {
     this.rightClickHighlights.clear();
     this.applyRightClickHighlights();
+  }
+
+  public on(type: ChessboardEventType, listener: ChessboardEventListener): void {
+    this.eventEmitter.on(type, listener);
+  }
+
+  public off(type: ChessboardEventType, listener: ChessboardEventListener): void {
+    this.eventEmitter.off(type, listener);
   }
 
   public flipBoard(): void {
