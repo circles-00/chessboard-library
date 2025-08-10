@@ -235,12 +235,9 @@ export class ChessboardUI {
     if (!square) return;
 
     if (this.selectedSquare) {
-      // Check if clicking the same square that's already selected
       if (this.selectedSquare.row === square.row && this.selectedSquare.col === square.col) {
-        // Toggle off the selection
         this.clearSelection();
       } else {
-        // Try to move or select a new piece
         this.tryMove(this.selectedSquare, square);
       }
     } else {
@@ -380,10 +377,8 @@ export class ChessboardUI {
       return;
     }
 
-    // Check if the target square has a piece of the same color
     const targetPiece = this.chessboard.getPiece(to);
     if (targetPiece && targetPiece.color === piece.color) {
-      // Select the new piece instead of trying to move
       this.clearSelection();
       this.selectSquare(to);
       return;
@@ -399,7 +394,6 @@ export class ChessboardUI {
       if (this.chessboard.move(move)) {
         this.handleSuccessfulMove(move);
       } else {
-        // Invalid move, just clear the selection
         this.clearSelection();
       }
     }
@@ -470,13 +464,11 @@ export class ChessboardUI {
     
     const gameState = this.chessboard.getGameState();
     
-    // Emit move event
     this.eventEmitter.emit({
       type: 'move',
       data: { move, gameState }
     });
     
-    // Check for special move types
     if (move.isCapture) {
       this.eventEmitter.emit({
         type: 'capture',
@@ -663,14 +655,11 @@ export class ChessboardUI {
   }
 
   private isLegalKnightMove(from: Square, to: Square): boolean {
-    // Check if it's a knight move pattern
     if (!this.isKnightMove(from, to)) return false;
     
-    // Check if there's a knight at the from square
     const piece = this.chessboard.getPiece(from);
     if (!piece || piece.type !== 'knight') return false;
     
-    // Check if the move is in the legal moves list
     const legalMoves = this.chessboard.getLegalMoves(from);
     return legalMoves.some(move => move.to.row === to.row && move.to.col === to.col);
   }
@@ -691,23 +680,18 @@ export class ChessboardUI {
     const toX = (to.col + 0.5) * 12.5;
     const toY = (7 - to.row + 0.5) * 12.5;
 
-    // Calculate the intermediate point for the L-shape
-    // The L goes either horizontally first then vertically, or vertically first then horizontally
     const rowDiff = Math.abs(to.row - from.row);
     const colDiff = Math.abs(to.col - from.col);
     
     let midX, midY;
     if (rowDiff === 2) {
-      // Move vertically first, then horizontally
       midX = fromX;
       midY = toY;
     } else {
-      // Move horizontally first, then vertically
       midX = toX;
       midY = fromY;
     }
 
-    // Adjust the final point slightly to account for the arrowhead
     const dx = toX - midX;
     const dy = toY - midY;
     const length = Math.sqrt(dx * dx + dy * dy);
@@ -715,7 +699,6 @@ export class ChessboardUI {
     const adjustedToX = midX + dx * scale;
     const adjustedToY = midY + dy * scale;
 
-    // Apply flipping if necessary
     const x1 = this.flipped ? 100 - fromX : fromX;
     const y1 = this.flipped ? 100 - fromY : fromY;
     const mx = this.flipped ? 100 - midX : midX;

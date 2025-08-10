@@ -39,17 +39,13 @@ export function updateFloatingPiecePosition(
   containerWidth?: number,
   containerHeight?: number
 ): void {
-  // Get the piece dimensions
   const pieceWidth = floatingPiece.offsetWidth;
   const pieceHeight = floatingPiece.offsetHeight;
   
-  // Calculate boundaries if container dimensions are provided
   let constrainedX = x;
   let constrainedY = y;
   
   if (containerWidth && containerHeight) {
-    // Keep the piece within the board boundaries
-    // Account for the piece being centered on the cursor (50% transform offset)
     const minX = pieceWidth / 2;
     const maxX = containerWidth - pieceWidth / 2;
     const minY = pieceHeight / 2;
