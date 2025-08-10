@@ -311,10 +311,13 @@ export class ChessboardUI {
   private handlePointerMove(event: PointerEvent): void {
     if (!this.isDragging || !this.floatingPiece) return;
     const rect = this.boardContainer.getBoundingClientRect();
+    const boardRect = this.boardElement.getBoundingClientRect();
     updateFloatingPiecePosition(
       this.floatingPiece,
       event.clientX - rect.left,
-      event.clientY - rect.top
+      event.clientY - rect.top,
+      boardRect.width,
+      boardRect.height
     );
   }
 

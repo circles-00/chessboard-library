@@ -35,10 +35,32 @@ export function createFloatingPiece(
 export function updateFloatingPiecePosition(
   floatingPiece: HTMLElement,
   x: number,
-  y: number
+  y: number,
+  containerWidth?: number,
+  containerHeight?: number
 ): void {
-  floatingPiece.style.left = `${x}px`;
-  floatingPiece.style.top = `${y}px`;
+  // Get the piece dimensions
+  const pieceWidth = floatingPiece.offsetWidth;
+  const pieceHeight = floatingPiece.offsetHeight;
+  
+  // Calculate boundaries if container dimensions are provided
+  let constrainedX = x;
+  let constrainedY = y;
+  
+  if (containerWidth && containerHeight) {
+    // Keep the piece within the board boundaries
+    // Account for the piece being centered on the cursor (50% transform offset)
+    const minX = pieceWidth / 2;
+    const maxX = containerWidth - pieceWidth / 2;
+    const minY = pieceHeight / 2;
+    const maxY = containerHeight - pieceHeight / 2;
+    
+    constrainedX = Math.max(minX, Math.min(maxX, x));
+    constrainedY = Math.max(minY, Math.min(maxY, y));
+  }
+  
+  floatingPiece.style.left = `${constrainedX}px`;
+  floatingPiece.style.top = `${constrainedY}px`;
 }
 
 export function getSquareFromPoint(
