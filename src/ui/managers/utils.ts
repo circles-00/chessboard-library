@@ -1,13 +1,5 @@
-import { Square, Piece } from '../core/types';
-import { getFloatingPieceStyles } from './styles';
-
-export interface DragState {
-  piece: Piece;
-  from: Square;
-  element: HTMLElement;
-  floatingElement: HTMLElement | null;
-  legalTargets: Square[];
-}
+import { Square } from '../../core/types';
+import { getFloatingPieceStyles } from '../styles';
 
 export function preventNativeDrag(element: HTMLElement): void {
   element.setAttribute('draggable', 'false');

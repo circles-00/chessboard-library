@@ -6,7 +6,7 @@ import {
   updateFloatingPiecePosition,
   getSquareFromPoint,
   cleanupDragElements
-} from '../dragAndDrop';
+} from './utils';
 
 export class DragDropManager {
   private handlePointerMoveBound = (e: PointerEvent) => this.handlePointerMove(e);
