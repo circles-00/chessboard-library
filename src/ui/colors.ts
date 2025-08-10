@@ -7,7 +7,9 @@ export interface ColorScheme {
     check?: string;
     legalMove?: string;
     capture?: string;
+    rightClick?: string;
   };
+  arrow?: string;
 }
 
 export const DEFAULT_COLORS: ColorScheme = {
@@ -18,8 +20,10 @@ export const DEFAULT_COLORS: ColorScheme = {
     lastMove: 'rgba(255, 255, 0, 0.2)',
     check: 'rgba(255, 0, 0, 0.5)',
     legalMove: 'rgba(130, 151, 105, 0.8)',
-    capture: 'rgba(130, 151, 105, 0.8)'
-  }
+    capture: 'rgba(130, 151, 105, 0.8)',
+    rightClick: 'rgba(255, 0, 0, 0.4)'
+  },
+  arrow: 'rgba(255, 170, 0, 0.65)'
 };
 
 export const WOOD_BORDER_COLOR = '#8b4513';
@@ -48,6 +52,10 @@ export const getHighlightStyle = (type: string, colors: ColorScheme): { backgrou
     case 'capture':
       return { 
         background: `radial-gradient(circle at center, rgba(0,0,0,0) 65%, ${colors.highlight?.capture || DEFAULT_COLORS.highlight!.capture} 65%, ${colors.highlight?.capture || DEFAULT_COLORS.highlight!.capture} 85%, rgba(0,0,0,0) 85%)` 
+      };
+    case 'rightClick':
+      return { 
+        backgroundColor: colors.highlight?.rightClick || DEFAULT_COLORS.highlight!.rightClick 
       };
     default:
       return {};

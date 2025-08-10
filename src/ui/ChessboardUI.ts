@@ -8,9 +8,9 @@ import {
   FILES,
   RANKS,
   PIECE_SIZE_RATIO,
-  DEFAULT_BOARD_SIZE_PX,
 } from './constants';
 import { DEFAULT_COLORS, getHighlightStyle } from './colors';
+import { DefaultChessboardUIConfig } from './defaultConfig';
 import {
   getBoardContainerStyles,
   getBoardStyles,
@@ -45,24 +45,22 @@ export class ChessboardUI {
   private isDragging: boolean = false;
   private floatingPiece: HTMLElement | null = null;
   private dragLegalTargets: Square[] = [];
+  private rightClickHighlights: Set<string> = new Set();
+  private arrows: Array<{ from: Square; to: Square }> = [];
+  private arrowSvg: SVGElement | null = null;
+  private isDrawingArrow: boolean = false;
+  private arrowStart: Square | null = null;
 
   constructor(
     private element: HTMLElement,
     private chessboard: Chessboard,
-    private config: ChessboardUIConfig = {
-      colors: DEFAULT_COLORS,
-      pieceSet: 'default',
-      size: DEFAULT_BOARD_SIZE_PX,
-      showCoordinates: true,
-      enableDragAndDrop: true,
-      enableHighlights: true,
-      animationDuration: DEFAULT_ANIMATION_DURATION
-    }
+    private config: ChessboardUIConfig = DefaultChessboardUIConfig
   ) {
     this.showCoordinates = config.showCoordinates ?? true;
     this.setupBoard();
     this.render();
     this.addStyles();
+    this.setupArrowLayer();
   }
 
   private setupBoard(): void {
@@ -84,17 +82,35 @@ export class ChessboardUI {
     }
   }
 
+  private setupArrowLayer(): void {
+    if (!this.config.enableArrows) return;
+
+    this.arrowSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    this.arrowSvg.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+    `;
+    this.arrowSvg.setAttribute('viewBox', '0 0 100 100');
+    this.arrowSvg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+    this.boardElement.appendChild(this.arrowSvg);
+  }
+
   private addCoordinates(): void {
     for (let i = 0; i < BOARD_SIZE; i++) {
       const fileLabel = document.createElement('div');
       fileLabel.className = 'coordinate file-coordinate';
-      fileLabel.textContent = this.flipped ? FILES[7 - i] : FILES[i];
+      fileLabel.textContent = FILES[i];
       fileLabel.style.cssText = getFileCoordinateStyles(i, this.flipped);
       this.boardContainer.appendChild(fileLabel);
 
       const rankLabel = document.createElement('div');
       rankLabel.className = 'coordinate rank-coordinate';
-      rankLabel.textContent = this.flipped ? RANKS[i] : RANKS[7 - i];
+      rankLabel.textContent = RANKS[7 - i];
       rankLabel.style.cssText = getRankCoordinateStyles(i, this.flipped);
       this.boardContainer.appendChild(rankLabel);
     }
@@ -106,7 +122,10 @@ export class ChessboardUI {
     this.renderSquares();
     this.renderPieces();
     this.applyHighlights();
+    this.applyRightClickHighlights();
     this.addEventListeners();
+    this.setupArrowLayer();
+    this.renderArrows();
   }
 
   private renderSquares(): void {
@@ -158,7 +177,7 @@ export class ChessboardUI {
 
   private createSquareElement(row: number, col: number): HTMLElement {
     const squareElement = document.createElement('div');
-    const isLight = (row + col) % 2 === 0;
+    const isLight = (row + col) % 2 !== 0;
     squareElement.className = `square ${isLight ? 'light' : 'dark'}`;
     squareElement.dataset.row = `${row}`;
     squareElement.dataset.col = `${col}`;
@@ -196,8 +215,16 @@ export class ChessboardUI {
   private addEventListeners(): void {
     this.boardElement.addEventListener('click', this.handleSquareClick.bind(this));
 
-    if (this.config.enableDragAndDrop ?? true) {
+    if (this.config.enableDragAndDrop) {
       this.boardElement.addEventListener('pointerdown', this.handlePointerDown.bind(this));
+    }
+
+    this.boardElement.addEventListener('contextmenu', (event) => event.preventDefault());
+
+    if (this.config.enableRightClickHighlight || this.config.enableArrows) {
+      this.boardElement.addEventListener('pointerdown', this.handleRightClick.bind(this));
+      this.boardElement.addEventListener('pointermove', this.handleRightDrag.bind(this));
+      this.boardElement.addEventListener('pointerup', this.handleRightRelease.bind(this));
     }
   }
 
@@ -210,6 +237,9 @@ export class ChessboardUI {
     } else {
       this.selectSquare(square);
     }
+
+    this.clearArrows();
+    this.clearRightClickHighlights();
   }
 
   private getSquareFromElement(element: HTMLElement): Square | null {
@@ -222,6 +252,8 @@ export class ChessboardUI {
   }
 
   private handlePointerDown(event: PointerEvent): void {
+    if (event.button !== 0) return;
+
     const square = this.getSquareFromElement(event.target as HTMLElement);
     if (!square) return;
 
@@ -456,6 +488,156 @@ export class ChessboardUI {
     this.boardContainer.appendChild(dialog);
   }
 
+  private handleRightClick(event: PointerEvent): void {
+    if (event.button !== 2) return;
+    event.preventDefault();
+
+    const square = this.getSquareFromElement(event.target as HTMLElement);
+    if (!square) return;
+
+    if (this.config.enableArrows) {
+      this.isDrawingArrow = true;
+      this.arrowStart = square;
+    }
+  }
+
+  private handleRightDrag(): void {
+    if (!this.isDrawingArrow || !this.arrowStart) return;
+  }
+
+  private handleRightRelease(event: PointerEvent): void {
+    if (!this.arrowStart) return;
+
+    const endSquare = this.getSquareFromElement(event.target as HTMLElement);
+    if (!endSquare) {
+      this.isDrawingArrow = false;
+      this.arrowStart = null;
+      return;
+    }
+
+    const isDrag = endSquare.row !== this.arrowStart.row || endSquare.col !== this.arrowStart.col;
+
+    if (isDrag && this.config.enableArrows) {
+      this.toggleArrow(this.arrowStart, endSquare);
+    } else if (!isDrag && this.config.enableRightClickHighlight) {
+      this.toggleRightClickHighlight(endSquare);
+    }
+
+    this.isDrawingArrow = false;
+    this.arrowStart = null;
+  }
+
+  private toggleRightClickHighlight(square: Square): void {
+    const key = `${square.row}-${square.col}`;
+
+    if (this.rightClickHighlights.has(key)) {
+      this.rightClickHighlights.delete(key);
+    } else {
+      this.rightClickHighlights.add(key);
+    }
+
+    this.applyRightClickHighlights();
+  }
+
+  private applyRightClickHighlights(): void {
+    this.boardElement.querySelectorAll('.highlight-rightClick').forEach(el => el.remove());
+
+    for (const key of this.rightClickHighlights) {
+      const [row, col] = key.split('-').map(Number);
+      const squareElement = this.getSquareElement(row, col);
+      if (squareElement) {
+        const overlay = this.createHighlightOverlay('rightClick');
+        squareElement.appendChild(overlay);
+      }
+    }
+  }
+
+  private toggleArrow(from: Square, to: Square): void {
+    const arrowIndex = this.arrows.findIndex(
+      arrow => arrow.from.row === from.row && arrow.from.col === from.col &&
+        arrow.to.row === to.row && arrow.to.col === to.col
+    );
+
+    if (arrowIndex !== -1) {
+      this.arrows.splice(arrowIndex, 1);
+    } else {
+      this.arrows.push({ from, to });
+    }
+
+    this.renderArrows();
+  }
+
+  private renderArrows(): void {
+    if (!this.arrowSvg) return;
+
+    this.arrowSvg.innerHTML = '';
+
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+    marker.setAttribute('id', 'arrowhead');
+    marker.setAttribute('markerWidth', '4');
+    marker.setAttribute('markerHeight', '4');
+    marker.setAttribute('refX', '2');
+    marker.setAttribute('refY', '2');
+    marker.setAttribute('orient', 'auto');
+    marker.setAttribute('markerUnits', 'strokeWidth');
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M0,0 L0,4 L4,2 z');
+    path.setAttribute('fill', this.config.colors.arrow || DEFAULT_COLORS.arrow || 'rgba(255, 170, 0, 0.8)');
+
+    marker.appendChild(path);
+    defs.appendChild(marker);
+    this.arrowSvg.appendChild(defs);
+
+    for (const arrow of this.arrows) {
+      const line = this.createArrowLine(arrow.from, arrow.to);
+      this.arrowSvg.appendChild(line);
+    }
+  }
+
+  private createArrowLine(from: Square, to: Square): SVGLineElement {
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+
+    const fromX = (from.col + 0.5) * 12.5;
+    const fromY = (7 - from.row + 0.5) * 12.5;
+    const toX = (to.col + 0.5) * 12.5;
+    const toY = (7 - to.row + 0.5) * 12.5;
+
+    const dx = toX - fromX;
+    const dy = toY - fromY;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    const scale = (length - 2) / length;
+
+    const x1 = this.flipped ? 100 - fromX : fromX;
+    const y1 = this.flipped ? 100 - fromY : fromY;
+    const adjustedToX = fromX + dx * scale;
+    const adjustedToY = fromY + dy * scale;
+    const x2 = this.flipped ? 100 - adjustedToX : adjustedToX;
+    const y2 = this.flipped ? 100 - adjustedToY : adjustedToY;
+
+    line.setAttribute('x1', x1.toString());
+    line.setAttribute('y1', y1.toString());
+    line.setAttribute('x2', x2.toString());
+    line.setAttribute('y2', y2.toString());
+    line.setAttribute('stroke', this.config.colors.arrow || DEFAULT_COLORS.arrow || 'rgba(255, 170, 0, 0.8)');
+    line.setAttribute('stroke-width', '2.5');
+    line.setAttribute('marker-end', 'url(#arrowhead)');
+    line.setAttribute('opacity', '0.7');
+
+    return line;
+  }
+
+  private clearArrows(): void {
+    this.arrows = [];
+    this.renderArrows();
+  }
+
+  private clearRightClickHighlights(): void {
+    this.rightClickHighlights.clear();
+    this.applyRightClickHighlights();
+  }
+
   public flipBoard(): void {
     this.flipped = !this.flipped;
     this.render();
@@ -471,6 +653,8 @@ export class ChessboardUI {
     this.selectedSquare = null;
     this.highlightedSquares.clear();
     this.lastMove = null;
+    this.clearArrows();
+    this.clearRightClickHighlights();
     this.render();
   }
 

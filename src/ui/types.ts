@@ -8,7 +8,9 @@ export interface ChessboardUIConfig {
       check?: string;
       legalMove?: string;
       capture?: string;
+      rightClick?: string;
     };
+    arrow?: string;
   };
   pieceSet: string;
   size?: number;
@@ -16,4 +18,6 @@ export interface ChessboardUIConfig {
   enableDragAndDrop?: boolean;
   enableHighlights?: boolean;
   animationDuration?: number;
+  enableArrows?: boolean;
+  enableRightClickHighlight?: boolean;
 }

@@ -31,12 +31,10 @@ export class MoveGenerator {
     const direction = color === 'white' ? 1 : -1;
     const startRow = color === 'white' ? 1 : 6;
 
-    // Single move
     const oneStep: Square = { row: square.row + direction, col: square.col };
     if (this.position.isValidSquare(oneStep) && !this.position.getPiece(oneStep)) {
       moves.push({ from: square, to: oneStep });
 
-      // Double move
       if (square.row === startRow) {
         const twoSteps: Square = { row: square.row + 2 * direction, col: square.col };
         if (this.position.isValidSquare(twoSteps) && !this.position.getPiece(twoSteps)) {
@@ -45,7 +43,6 @@ export class MoveGenerator {
       }
     }
 
-    // Captures
     const captureMoves: Square[] = [
       { row: square.row + direction, col: square.col - 1 },
       { row: square.row + direction, col: square.col + 1 },

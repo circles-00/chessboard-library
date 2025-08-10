@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Chessboard, ChessboardUI } from 'chessboard-lib';
+import { Chessboard, ChessboardUI, DefaultChessboardUIConfig } from 'chessboard-lib';
 
 export default function Home() {
   const chessboardRef = useRef<HTMLDivElement>(null);
@@ -11,16 +11,8 @@ export default function Home() {
     if (chessboardRef.current) {
       const chessboard = new Chessboard();
       const chessboardUI = new ChessboardUI(chessboardRef.current, chessboard, {
-        colors: {
-          light: '#f0d9b5',
-          dark: '#b58863'
-        },
-        pieceSet: 'default',
+        ...DefaultChessboardUIConfig,
         size: 1000,
-        showCoordinates: true,
-        enableDragAndDrop: true,
-        enableHighlights: true,
-        animationDuration: 250
       });
       setUI(chessboardUI);
     }
@@ -32,7 +24,7 @@ export default function Home() {
         <h1 className="text-4xl font-bold text-center mb-8 text-slate-800 bg-gradient-to-r from-amber-600 to-amber-800 bg-clip-text text-transparent">
           Chess.com Style Board
         </h1>
-        <div ref={chessboardRef} className="mb-8 flex justify-center"></div>
+        <div ref={chessboardRef} className="mb-12 flex justify-center"></div>
         <div className="flex gap-4 justify-center">
           <button
             onClick={() => ui?.flipBoard()}

@@ -253,7 +253,6 @@ export class Chessboard {
       }
     }
     
-    // If a rook was captured on its original square, revoke opponent castling rights.
     if (capturedPiece && capturedPiece.type === 'rook') {
       const startRow = capturedPiece.color === 'white' ? 0 : 7;
       if (move.to.row === startRow) {

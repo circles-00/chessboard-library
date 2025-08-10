@@ -82,18 +82,14 @@ export class CheckValidator {
   wouldMoveLeaveKingInCheck(move: Move, color: Color): boolean {
     const tempPosition = this.position.clone();
 
-    // Simulate special moves precisely
     if (move.isEnPassant) {
-      // Remove the captured pawn which is on the same row as from, and column of to
       const capturedPawnSquare = { row: move.from.row, col: move.to.col };
       tempPosition.setPiece(capturedPawnSquare, null);
       tempPosition.movePiece(move.from, move.to);
     } else if (move.isCastling) {
-      // Move king
       const row = move.from.row;
       const isKingside = move.castlingSide === 'kingside';
       tempPosition.movePiece(move.from, move.to);
-      // Move rook
       if (isKingside) {
         tempPosition.movePiece({ row, col: 7 }, { row, col: 5 });
       } else {
@@ -102,7 +98,6 @@ export class CheckValidator {
     } else {
       tempPosition.movePiece(move.from, move.to);
       if (move.promotion) {
-        // Apply promotion type on the destination square for accuracy
         const piece = this.position.getPiece(move.from);
         if (piece) {
           tempPosition.setPiece(move.to, { type: move.promotion, color: piece.color });
