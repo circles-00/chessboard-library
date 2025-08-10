@@ -1,6 +1,6 @@
 import { Move, GameState } from '../core/types';
 
-export type ChessboardEventType = 
+export type ChessboardEventType =
   | 'move'
   | 'checkmate'
   | 'stalemate'

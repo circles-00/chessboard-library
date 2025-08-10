@@ -2,7 +2,6 @@ import { Square, PieceType } from '../core/types';
 import { createPieceElement } from './pieces';
 import { PROMOTION_PIECES } from './constants';
 import { getPromotionModalStyles, getPromotionButtonStyles, getPromotionButtonHoverStyles } from './styles';
-import { DIALOG_BUTTON_COLOR } from './colors';
 
 export function createPromotionModal(
   from: Square,
@@ -57,20 +56,3 @@ function createPromotionButton(
   return button;
 }
 
-export function createGameEndDialog(message: string): HTMLElement {
-  const dialog = document.createElement('div');
-  dialog.className = 'game-end-dialog';
-  dialog.innerHTML = `
-    <h2 style="margin: 0 0 20px 0; font-size: 24px; color: #333;">${message}</h2>
-    <button style="
-      padding: 10px 20px;
-      font-size: 16px;
-      background: ${DIALOG_BUTTON_COLOR};
-      color: white;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-    " onclick="this.parentElement.remove()">Close</button>
-  `;
-  return dialog;
-}
