@@ -144,15 +144,6 @@ export const generateDynamicCSS = (config: ChessboardUIConfig) => `
     will-change: transform;
   }
 
-  .piece:hover {
-    transform: scale(1.05);
-    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
-  }
-
-  .square:hover {
-    box-shadow: inset 0 0 0 2px rgba(130, 151, 105, 0.4);
-  }
-
   .square {
     transition: background-color 0.2s ease;
   }
