@@ -239,11 +239,20 @@ export class ChessboardUI {
     const square = this.getSquareFromElement(event.target as HTMLElement);
     if (!square) return;
 
+    const clickedPiece = this.chessboard.getPiece(square);
+
     if (this.selectedSquare) {
       if (this.selectedSquare.row === square.row && this.selectedSquare.col === square.col) {
         this.clearSelection();
       } else {
-        this.tryMove(this.selectedSquare, square);
+        const selectedPiece = this.chessboard.getPiece(this.selectedSquare);
+        if (selectedPiece && selectedPiece.color === this.chessboard.getTurn()) {
+          this.tryMove(this.selectedSquare, square);
+        } else if (clickedPiece) {
+          this.selectSquare(square);
+        } else {
+          this.clearSelection();
+        }
       }
     } else {
       this.selectSquare(square);
@@ -271,11 +280,6 @@ export class ChessboardUI {
     const piece = this.chessboard.getPiece(square);
     
     if (!piece) {
-      this.handleSquareClick(event as MouseEvent);
-      return;
-    }
-
-    if (piece.color !== this.chessboard.getTurn()) {
       this.handleSquareClick(event as MouseEvent);
       return;
     }
@@ -318,10 +322,15 @@ export class ChessboardUI {
     this.selectedSquare = from;
     this.highlightSquare(from, 'selected');
 
-    this.dragLegalTargets = this.chessboard.getLegalMoves(from).map(m => m.to);
-    for (const to of this.dragLegalTargets) {
-      const targetPiece = this.chessboard.getPiece(to);
-      this.highlightSquare(to, targetPiece ? 'capture' : 'legalMove');
+    const piece = this.chessboard.getPiece(from);
+    if (piece && piece.color === this.chessboard.getTurn()) {
+      this.dragLegalTargets = this.chessboard.getLegalMoves(from).map(m => m.to);
+      for (const to of this.dragLegalTargets) {
+        const targetPiece = this.chessboard.getPiece(to);
+        this.highlightSquare(to, targetPiece ? 'capture' : 'legalMove');
+      }
+    } else {
+      this.dragLegalTargets = [];
     }
   }
 
@@ -394,11 +403,17 @@ export class ChessboardUI {
     if (this.draggedPiece && square) {
       const dragEl = this.dragElement;
       const fromSquare = this.draggedPiece.from;
-      this.tryMove(fromSquare, square);
-      if (this.lastMove &&
-        this.lastMove.from.row === fromSquare.row &&
-        this.lastMove.from.col === fromSquare.col) {
-        dragEl?.remove();
+      const piece = this.draggedPiece.piece;
+      
+      if (piece.color === this.chessboard.getTurn()) {
+        this.tryMove(fromSquare, square);
+        if (this.lastMove &&
+          this.lastMove.from.row === fromSquare.row &&
+          this.lastMove.from.col === fromSquare.col) {
+          dragEl?.remove();
+        }
+      } else {
+        this.selectedSquare = fromSquare;
       }
     }
 
@@ -409,7 +424,7 @@ export class ChessboardUI {
   private selectSquare(square: Square): void {
     const piece = this.chessboard.getPiece(square);
 
-    if (piece && piece.color === this.chessboard.getTurn()) {
+    if (piece) {
       this.showLegalMovesForSquare(square);
     }
   }
@@ -419,11 +434,14 @@ export class ChessboardUI {
     this.selectedSquare = square;
     this.highlightSquare(square, 'selected');
 
-    const legalMoves = this.chessboard.getLegalMoves(square);
-    legalMoves.forEach(move => {
-      const targetPiece = this.chessboard.getPiece(move.to);
-      this.highlightSquare(move.to, targetPiece ? 'capture' : 'legalMove');
-    });
+    const piece = this.chessboard.getPiece(square);
+    if (piece && piece.color === this.chessboard.getTurn()) {
+      const legalMoves = this.chessboard.getLegalMoves(square);
+      legalMoves.forEach(move => {
+        const targetPiece = this.chessboard.getPiece(move.to);
+        this.highlightSquare(move.to, targetPiece ? 'capture' : 'legalMove');
+      });
+    }
   }
 
   private tryMove(from: Square, to: Square): void {
