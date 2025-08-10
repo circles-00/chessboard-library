@@ -610,12 +610,91 @@ export class ChessboardUI {
     this.arrowSvg.appendChild(defs);
 
     for (const arrow of this.arrows) {
-      const line = this.createArrowLine(arrow.from, arrow.to);
-      this.arrowSvg.appendChild(line);
+      const element = this.createArrowElement(arrow.from, arrow.to);
+      this.arrowSvg.appendChild(element);
     }
   }
 
-  private createArrowLine(from: Square, to: Square): SVGLineElement {
+  private isKnightMove(from: Square, to: Square): boolean {
+    const rowDiff = Math.abs(to.row - from.row);
+    const colDiff = Math.abs(to.col - from.col);
+    return (rowDiff === 2 && colDiff === 1) || (rowDiff === 1 && colDiff === 2);
+  }
+
+  private isLegalKnightMove(from: Square, to: Square): boolean {
+    // Check if it's a knight move pattern
+    if (!this.isKnightMove(from, to)) return false;
+    
+    // Check if there's a knight at the from square
+    const piece = this.chessboard.getPiece(from);
+    if (!piece || piece.type !== 'knight') return false;
+    
+    // Check if the move is in the legal moves list
+    const legalMoves = this.chessboard.getLegalMoves(from);
+    return legalMoves.some(move => move.to.row === to.row && move.to.col === to.col);
+  }
+
+  private createArrowElement(from: Square, to: Square): SVGElement {
+    if (this.isLegalKnightMove(from, to)) {
+      return this.createKnightArrow(from, to);
+    } else {
+      return this.createStraightArrow(from, to);
+    }
+  }
+
+  private createKnightArrow(from: Square, to: Square): SVGPathElement {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+
+    const fromX = (from.col + 0.5) * 12.5;
+    const fromY = (7 - from.row + 0.5) * 12.5;
+    const toX = (to.col + 0.5) * 12.5;
+    const toY = (7 - to.row + 0.5) * 12.5;
+
+    // Calculate the intermediate point for the L-shape
+    // The L goes either horizontally first then vertically, or vertically first then horizontally
+    const rowDiff = Math.abs(to.row - from.row);
+    const colDiff = Math.abs(to.col - from.col);
+    
+    let midX, midY;
+    if (rowDiff === 2) {
+      // Move vertically first, then horizontally
+      midX = fromX;
+      midY = toY;
+    } else {
+      // Move horizontally first, then vertically
+      midX = toX;
+      midY = fromY;
+    }
+
+    // Adjust the final point slightly to account for the arrowhead
+    const dx = toX - midX;
+    const dy = toY - midY;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    const scale = length > 0 ? (length - 2) / length : 1;
+    const adjustedToX = midX + dx * scale;
+    const adjustedToY = midY + dy * scale;
+
+    // Apply flipping if necessary
+    const x1 = this.flipped ? 100 - fromX : fromX;
+    const y1 = this.flipped ? 100 - fromY : fromY;
+    const mx = this.flipped ? 100 - midX : midX;
+    const my = this.flipped ? 100 - midY : midY;
+    const x2 = this.flipped ? 100 - adjustedToX : adjustedToX;
+    const y2 = this.flipped ? 100 - adjustedToY : adjustedToY;
+
+    const pathData = `M ${x1} ${y1} L ${mx} ${my} L ${x2} ${y2}`;
+    path.setAttribute('d', pathData);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', this.config.colors.arrow || DEFAULT_COLORS.arrow || 'rgba(255, 170, 0, 0.8)');
+    path.setAttribute('stroke-width', '2.5');
+    path.setAttribute('marker-end', 'url(#arrowhead)');
+    path.setAttribute('opacity', '0.7');
+    path.setAttribute('stroke-linejoin', 'round');
+
+    return path;
+  }
+
+  private createStraightArrow(from: Square, to: Square): SVGLineElement {
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
 
     const fromX = (from.col + 0.5) * 12.5;
